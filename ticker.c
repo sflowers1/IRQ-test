@@ -12,6 +12,7 @@
 #include "errno.h"
 #include <sys/timerfd.h>
 #include <sys/epoll.h>
+#include <aio.h>
 
 #define TIMER_OUT_PATH 	"/sys/class/gpio/gpio47"
 #define LED_OUT_PATH 	"/sys/class/gpio/gpio26"
@@ -37,15 +38,17 @@ int main(int argc, char* argv[])
    
    //struct pollfd fdset[2];
    int epfd;
-   int fd_in;
+   //int fd_in;
    int action;
-   int fd_led;
+  //int fd_led;
    int fd_timer_out;      
    int fd_timer_in;
    
    char buf[2];
    int len;
    int i;
+   struct aiocb cbtimer;
+   //struct aiocb cbled;
  
    // setup gpio
    if(system("echo 46 > /sys/class/gpio/export") == -1)
@@ -116,7 +119,7 @@ int main(int argc, char* argv[])
    #endif
    
    // setup file descriptor for poll()		
-   fd_in = open(IRQ_IN_PATH "/value", O_RDONLY | O_SYNC | O_NONBLOCK);
+/*   fd_in = open(IRQ_IN_PATH "/value", O_RDONLY | O_SYNC | O_NONBLOCK);
    printf("fd irq input:%d\n",fd_in);
    
    if(fd_in < 0)
@@ -124,7 +127,7 @@ int main(int argc, char* argv[])
 	   perror("file open problem");
 	   exit(0);
    }
-   
+  */ 
    // setup epoll instance
    epfd = epoll_create1(EPOLL_CLOEXEC);
    
@@ -134,7 +137,7 @@ int main(int argc, char* argv[])
    }
    
    struct epoll_event ev; 
-   struct epoll_event events[2];
+   struct epoll_event events[1];
    
    // add timerfd to epoll
    ev.events = EPOLLIN | EPOLLERR | EPOLLET;
@@ -142,16 +145,24 @@ int main(int argc, char* argv[])
    epoll_ctl(epfd, EPOLL_CTL_ADD, fd_timer_in, &ev);
    
    // add fd_in to epoll
-   ev.events = EPOLLPRI | EPOLLERR | EPOLLET;
-   ev.data.ptr = &fd_in;
-   epoll_ctl(epfd, EPOLL_CTL_ADD, fd_in, &ev);
+   //ev.events = EPOLLPRI | EPOLLERR | EPOLLET;
+   //ev.data.ptr = &fd_in;
+   //epoll_ctl(epfd, EPOLL_CTL_ADD, fd_in, &ev);
    
+   // setup output fds
    fd_timer_out = open( TIMER_OUT_PATH "/value", O_WRONLY | O_DSYNC | O_NONBLOCK);
-   fd_led = open( LED_OUT_PATH "/value", O_WRONLY | O_DSYNC | O_NONBLOCK);
+   //fd_led = open( LED_OUT_PATH "/value", O_WRONLY | O_DSYNC | O_NONBLOCK);
+   
+   memset(&cbtimer, 0, sizeof(cbtimer));
+   //memset(&cbled, 0, sizeof(cbled));
+   cbtimer.aio_fildes = fd_timer_out;
+   //cbled.aio_fildes = fd_led;
+   cbtimer.aio_nbytes = 2;					   
+   //cbled.aio_nbytes = 2;
    
    while(1)
    {
-		action = epoll_wait(epfd, events, 2, -1);
+		action = epoll_wait(epfd, events, 1, -1);
 		
 		if(action < 0)
 		{
@@ -169,47 +180,54 @@ int main(int argc, char* argv[])
 		
 		if(action > 0)
 		{
-			for(i = 0; i < action; i++)
-			{
-				if(events[i].data.ptr == &fd_timer_in)
-				{
+			//for(i = 0; i < action; i++)
+			//{
+				//if(events.data.ptr == &fd_timer_in)
+				//{
 					//printf("timer timeout\n");
 					len = read(fd_timer_in, &timer_increment, sizeof(timer_increment));
 					
 					//fd_timer_out = open( TIMER_OUT_PATH "/value", O_WRONLY| O_SYNC);//);// | O_NONBLOCK);
-					lseek(fd_timer_out, 0, SEEK_SET);
+					//lseek(fd_timer_out, 0, SEEK_SET);
      
 				   if(timer_toggle ^= 1)
 				   {
-					   write(fd_timer_out, "1", 2);
+					   //write(fd_timer_out, "1", 2);
+					   cbtimer.aio_buf = "1";
+					   
 				   }
 				   else
 				   {
-					   write(fd_timer_out, "0", 2);
+					   //write(fd_timer_out, "0", 2);
+					   cbtimer.aio_buf = "0";
 				   }
 				   
+				   aio_write(&cbtimer);
 				   //close(fd_timer_out);
-				}
-				
+				//}
+				/*
 				if(events[i].data.ptr == &fd_in)
 				{
 					//printf("IRQ input\n");
 					
 					//fd_led = open( LED_OUT_PATH "/value", O_WRONLY| O_SYNC);//);// | O_NONBLOCK);
-					lseek(fd_led, 0, SEEK_SET);
+					//lseek(fd_led, 0, SEEK_SET);
 			
 					if(timer_toggle)
 					{
-						write(fd_led, "1", 2);
+						//write(fd_led, "1", 2);
+						cbled.aio_buf = "1";
 					}
 					else
 					{
-						write(fd_led, "0", 2);
+						//write(fd_led, "0", 2);
+						cbled.aio_buf = "0";
 					}
 					
+					aio_write(&cbled);
 					//close(fd_led);
-				}
-			}
+				}*/
+			//}
 		}
 	}
 		
@@ -254,9 +272,9 @@ int main(int argc, char* argv[])
 		}
 	}   */
    
-   close(fd_in);
+   //close(fd_in);
    close(fd_timer_in);
-   close(fd_led);
+   //close(fd_led);
    printf("finished\n");
    return 0;
 }

@@ -12,6 +12,7 @@
 #include "errno.h"
 #include <sys/timerfd.h>
 #include <sys/epoll.h>
+#include <aio.h>
 
 #define TIMER_OUT_PATH 	"/sys/class/gpio/gpio47"
 #define LED_OUT_PATH 	"/sys/class/gpio/gpio26"
@@ -46,6 +47,8 @@ int main(int argc, char* argv[])
    char buf[2];
    int len;
    int i;
+   struct aiocb cbtimer;
+   struct aiocb cbled;
  
    // setup gpio
    if(system("echo 46 > /sys/class/gpio/export") == -1)
@@ -146,8 +149,16 @@ int main(int argc, char* argv[])
    ev.data.ptr = &fd_in;
    epoll_ctl(epfd, EPOLL_CTL_ADD, fd_in, &ev);
    
+   // setup output fds
    fd_timer_out = open( TIMER_OUT_PATH "/value", O_WRONLY | O_DSYNC | O_NONBLOCK);
    fd_led = open( LED_OUT_PATH "/value", O_WRONLY | O_DSYNC | O_NONBLOCK);
+   
+   memset(&cbtimer, 0, sizeof(cbtimer));
+   memset(&cbled, 0, sizeof(cbled));
+   cbtimer.aio_fildes = fd_timer_out;
+   cbled.aio_fildes = fd_led;
+   cbtimer.aio_nbytes = 2;					   
+   cbled.aio_nbytes = 2;
    
    while(1)
    {
@@ -177,17 +188,21 @@ int main(int argc, char* argv[])
 					len = read(fd_timer_in, &timer_increment, sizeof(timer_increment));
 					
 					//fd_timer_out = open( TIMER_OUT_PATH "/value", O_WRONLY| O_SYNC);//);// | O_NONBLOCK);
-					lseek(fd_timer_out, 0, SEEK_SET);
+					//lseek(fd_timer_out, 0, SEEK_SET);
      
 				   if(timer_toggle ^= 1)
 				   {
-					   write(fd_timer_out, "1", 2);
+					   //write(fd_timer_out, "1", 2);
+					   cbtimer.aio_buf = "1";
+					   
 				   }
 				   else
 				   {
-					   write(fd_timer_out, "0", 2);
+					   //write(fd_timer_out, "0", 2);
+					   cbtimer.aio_buf = "0";
 				   }
 				   
+				   aio_write(&cbtimer);
 				   //close(fd_timer_out);
 				}
 				
@@ -196,17 +211,20 @@ int main(int argc, char* argv[])
 					//printf("IRQ input\n");
 					
 					//fd_led = open( LED_OUT_PATH "/value", O_WRONLY| O_SYNC);//);// | O_NONBLOCK);
-					lseek(fd_led, 0, SEEK_SET);
+					//lseek(fd_led, 0, SEEK_SET);
 			
 					if(timer_toggle)
 					{
-						write(fd_led, "1", 2);
+						//write(fd_led, "1", 2);
+						cbled.aio_buf = "1";
 					}
 					else
 					{
-						write(fd_led, "0", 2);
+						//write(fd_led, "0", 2);
+						cbled.aio_buf = "0";
 					}
 					
+					aio_write(&cbled);
 					//close(fd_led);
 				}
 			}

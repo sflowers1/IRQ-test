@@ -1,0 +1,7 @@
+
+for i in {1..1000}
+do
+	dd if=/dev/zero of=/tmp/tmp.$i bs=1M count=10
+	rm /tmp/tmp.$i
+	echo $i	
+done
